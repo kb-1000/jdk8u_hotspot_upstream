@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,25 +23,28 @@
 
 /*
  * @test
- * @bug 8031321
- * @library /testlibrary /testlibrary/whitebox /compiler/whitebox ..
- * @build AddnTestL
- * @run main ClassFileInstaller sun.hotspot.WhiteBox
- * @run main/othervm -Xbootclasspath/a:. -Xbatch -XX:+UnlockDiagnosticVMOptions -XX:+WhiteBoxAPI
- *                   -XX:+IgnoreUnrecognizedVMOptions -XX:+UseBMI1Instructions AddnTestL
+ * @bug 8226798
+ * @summary Check that the vTable for class C gets set up without causing
+ *          an assertion failure.
+ * @compile pkg/A.java
+ * @run main VTableTest
  */
 
-import java.lang.reflect.Method;
+public class VTableTest {
 
-public class AddnTestL extends AddnTestI {
-
-    protected AddnTestL(Method method) {
-        super(method);
-        isLongOperation = true;
+    interface Intf {
+        public default void m() { }
+        public default void unusedButNeededToReproduceIssue() { }
     }
 
-    public static void main(String[] args) throws Exception {
-        BmiIntrinsicBase.verifyTestCase(AddnTestL::new, TestAndnL.AndnLExpr.class.getDeclaredMethods());
-        BmiIntrinsicBase.verifyTestCase(AddnTestL::new, TestAndnL.AndnLCommutativeExpr.class.getDeclaredMethods());
+    static class B extends pkg.A implements Intf {
+    }
+
+    static class C extends B {
+        public void m() { System.out.println("In C.m()"); }
+    }
+
+    public static void main(String[] args) {
+        new C().m();
     }
 }
