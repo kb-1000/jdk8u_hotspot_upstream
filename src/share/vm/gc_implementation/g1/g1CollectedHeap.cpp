@@ -2520,6 +2520,12 @@ void G1CollectedHeap::collect(GCCause::Cause cause) {
           }
         }
       }
+    } else if (GC_locker::should_discard(cause, gc_count_before)) {
+      // Return to be consistent with VMOp failure due to another
+      // collection slipping in after our gc_count but before our
+      // request is processed.  _gc_locker collections upgraded by
+      // GCLockerInvokesConcurrent are handled above and never discarded.
+      return;
     } else {
       if (cause == GCCause::_gc_locker || cause == GCCause::_wb_young_gc
           DEBUG_ONLY(|| cause == GCCause::_scavenge_alot)) {
@@ -2790,6 +2796,7 @@ HeapRegion* G1CollectedHeap::start_cset_region_for_worker(uint worker_i) {
       // Previous workers starting region is valid
       // so let's iterate from there
       start_ind = (cs_size * (worker_i - 1)) / active_workers;
+      OrderAccess::loadload();
       result = _worker_cset_start_region[worker_i - 1];
     }
 

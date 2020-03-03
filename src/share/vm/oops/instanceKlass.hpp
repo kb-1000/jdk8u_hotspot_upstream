@@ -227,6 +227,7 @@ class InstanceKlass: public Klass {
   // _is_marked_dependent can be set concurrently, thus cannot be part of the
   // _misc_flags.
   bool            _is_marked_dependent;  // used for marking during flushing and deoptimization
+  bool            _is_being_redefined;   // used for locking redefinition
   bool            _has_unloaded_dependent;
 
   enum {
@@ -242,7 +243,7 @@ class InstanceKlass: public Klass {
   u2              _misc_flags;
   u2              _minor_version;        // minor version number of class file
   u2              _major_version;        // major version number of class file
-  Thread*         _init_thread;          // Pointer to current thread doing initialization (to handle recusive initialization)
+  Thread*         _init_thread;          // Pointer to current thread doing initialization (to handle recursive initialization)
   int             _vtable_len;           // length of Java vtable (in words)
   int             _itable_len;           // length of Java itable (in words)
   OopMapCache*    volatile _oop_map_cache;   // OopMapCache for all methods in the klass (allocated lazily)
@@ -668,6 +669,10 @@ class InstanceKlass: public Klass {
   void set_nonstatic_oop_map_size(int words) {
     _nonstatic_oop_map_size = words;
   }
+
+  // Redefinition locking.  Class can only be redefined by one thread at a time.
+  bool is_being_redefined() const          { return _is_being_redefined; }
+  void set_is_being_redefined(bool value)  { _is_being_redefined = value; }
 
   // RedefineClasses() support for previous versions:
   void add_previous_version(instanceKlassHandle ikh, int emcp_method_count);

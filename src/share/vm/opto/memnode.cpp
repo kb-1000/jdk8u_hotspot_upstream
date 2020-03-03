@@ -1359,6 +1359,14 @@ Node *LoadNode::split_through_phi(PhaseGVN *phase) {
         Node* in = mem->in(i);
         Node*  m = optimize_memory_chain(in, t_oop, this, phase);
         if (m == mem) {
+          if (i == 1) {
+            // if the first edge was a loop, check second edge too.
+            // If both are replaceable - we are in an infinite loop
+            Node *n = optimize_memory_chain(mem->in(2), t_oop, this, phase);
+            if (n == mem) {
+              break;
+            }
+          }
           set_req(Memory, mem->in(cnt - i));
           return this; // made change
         }
@@ -2477,7 +2485,8 @@ Node *StoreNode::Ideal(PhaseGVN *phase, bool can_reshape) {
     assert(mem != mem->in(MemNode::Memory), "dead loop in StoreNode::Ideal");
 
     assert(Opcode() == mem->Opcode() ||
-           phase->C->get_alias_index(adr_type()) == Compile::AliasIdxRaw,
+           phase->C->get_alias_index(adr_type()) == Compile::AliasIdxRaw ||
+           (is_mismatched_access() || mem->as_Store()->is_mismatched_access()),
            "no mismatched stores, except on raw memory");
 
     if (mem->outcnt() == 1 &&           // check for intervening uses

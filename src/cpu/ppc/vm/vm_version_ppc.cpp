@@ -174,7 +174,6 @@ void VM_Version::initialize() {
   }
 
   // The AES intrinsic stubs require AES instruction support.
-#if defined(VM_LITTLE_ENDIAN)
   if (has_vcipher()) {
     if (FLAG_IS_DEFAULT(UseAES)) {
       UseAES = true;
@@ -195,17 +194,10 @@ void VM_Version::initialize() {
     FLAG_SET_DEFAULT(UseAESIntrinsics, false);
   }
 
-#else
-  if (UseAES) {
-    warning("AES instructions are not available on this CPU");
-    FLAG_SET_DEFAULT(UseAES, false);
+  if (UseGHASHIntrinsics) {
+    warning("GHASH intrinsics are not available on this CPU");
+    FLAG_SET_DEFAULT(UseGHASHIntrinsics, false);
   }
-  if (UseAESIntrinsics) {
-    if (!FLAG_IS_DEFAULT(UseAESIntrinsics))
-      warning("AES intrinsics are not available on this CPU");
-    FLAG_SET_DEFAULT(UseAESIntrinsics, false);
-  }
-#endif
 
   if (has_vshasig()) {
     if (FLAG_IS_DEFAULT(UseSHA)) {

@@ -289,22 +289,25 @@ InstanceKlass* klassVtable::find_transitive_override(InstanceKlass* initialsuper
                             int vtable_index, Handle target_loader, Symbol* target_classname, Thread * THREAD) {
   InstanceKlass* superk = initialsuper;
   while (superk != NULL && superk->super() != NULL) {
-    InstanceKlass* supersuperklass = InstanceKlass::cast(superk->super());
-    klassVtable* ssVtable = supersuperklass->vtable();
+    klassVtable* ssVtable = (superk->super())->vtable();
     if (vtable_index < ssVtable->length()) {
       Method* super_method = ssVtable->method_at(vtable_index);
+      // get the class holding the matching method
+      // make sure you use that class for is_override
+      InstanceKlass* supermethodholder = super_method->method_holder();
 #ifndef PRODUCT
       Symbol* name= target_method()->name();
       Symbol* signature = target_method()->signature();
       assert(super_method->name() == name && super_method->signature() == signature, "vtable entry name/sig mismatch");
 #endif
-      if (supersuperklass->is_override(super_method, target_loader, target_classname, THREAD)) {
+
+      if (supermethodholder->is_override(super_method, target_loader, target_classname, THREAD)) {
 #ifndef PRODUCT
         if (PrintVtables && Verbose) {
           ResourceMark rm(THREAD);
           char* sig = target_method()->name_and_sig_as_C_string();
           tty->print("transitive overriding superclass %s with %s::%s index %d, original flags: ",
-           supersuperklass->internal_name(),
+           supermethodholder->internal_name(),
            _klass->internal_name(), sig, vtable_index);
            super_method->access_flags().print_on(tty);
            if (super_method->is_default_method()) {
@@ -656,13 +659,14 @@ bool klassVtable::needs_new_vtable_entry(methodHandle target_method,
 
   // search through the super class hierarchy to see if we need
   // a new entry
-  ResourceMark rm;
+  ResourceMark rm(THREAD);
   Symbol* name = target_method()->name();
   Symbol* signature = target_method()->signature();
   Klass* k = super;
   Method* super_method = NULL;
   InstanceKlass *holder = NULL;
   Method* recheck_method =  NULL;
+  bool found_pkg_prvt_method = false;
   while (k != NULL) {
     // lookup through the hierarchy for a method with matching name and sign.
     super_method = InstanceKlass::cast(k)->lookup_method(name, signature);
@@ -684,10 +688,29 @@ bool klassVtable::needs_new_vtable_entry(methodHandle target_method,
         return false;
       // else keep looking for transitive overrides
       }
+      // If we get here then one of the super classes has a package private method
+      // that will not get overridden because it is in a different package.  But,
+      // that package private method does "override" any matching methods in super
+      // interfaces, so there will be no miranda vtable entry created.  So, set flag
+      // to TRUE for use below, in case there are no methods in super classes that
+      // this target method overrides.
+      assert(super_method->is_package_private(), "super_method must be package private");
+      assert(!superk->is_same_class_package(classloader(), classname),
+             "Must be different packages");
+      found_pkg_prvt_method = true;
     }
 
     // Start with lookup result and continue to search up
     k = superk->super(); // haven't found an override match yet; continue to look
+  }
+
+  // If found_pkg_prvt_method is set, then the ONLY matching method in the
+  // superclasses is package private in another package. That matching method will
+  // prevent a miranda vtable entry from being created. Because the target method can not
+  // override the package private method in another package, then it needs to be the root
+  // for its own vtable entry.
+  if (found_pkg_prvt_method) {
+     return true;
   }
 
   // if the target method is public or protected it may have a matching
@@ -697,7 +720,7 @@ bool klassVtable::needs_new_vtable_entry(methodHandle target_method,
   InstanceKlass *sk = InstanceKlass::cast(super);
   if (sk->has_miranda_methods()) {
     if (sk->lookup_method_in_all_interfaces(name, signature, Klass::find_defaults) != NULL) {
-      return false;  // found a matching miranda; we do not need a new entry
+      return false; // found a matching miranda; we do not need a new entry
     }
   }
   return true; // found no match; we need a new entry
